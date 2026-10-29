@@ -20,6 +20,8 @@ import (
 
 	"tailscale.com/cmd/tailscale/cli"
 	"tailscale.com/safesocket"
+
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 )
 
 // Bridge is a socket that stands in for one tailnet's tailscaled.
@@ -30,8 +32,8 @@ type Bridge struct {
 }
 
 // NewBridge serves tailnet's LocalAPI, reached through the tailmux HTTP
-// API at api (host:port), on a fresh socket.
-func NewBridge(api, tailnet string) (*Bridge, error) {
+// API at api (host:port) with its token, on a fresh socket.
+func NewBridge(api, token, tailnet string) (*Bridge, error) {
 	b := &Bridge{}
 	if runtime.GOOS == "windows" {
 		var r [8]byte
@@ -56,7 +58,7 @@ func NewBridge(api, tailnet string) (*Bridge, error) {
 			// /localapi/v0/status -> /tailnets/{name}/localapi/v0/status
 			pr.SetURL(base)
 			pr.Out.Host = api
-			pr.Out.Header.Set("X-Tailmux", "1")
+			pr.Out.Header.Set(apiauth.Header, token)
 		},
 		Transport:     &http.Transport{Proxy: nil, DisableKeepAlives: true},
 		FlushInterval: -1,
@@ -77,8 +79,8 @@ func (b *Bridge) Close() error {
 }
 
 // Run runs the tailscale CLI with args against tailnet.
-func Run(ctx context.Context, api, tailnet string, args []string) error {
-	b, err := NewBridge(api, tailnet)
+func Run(ctx context.Context, api, token, tailnet string, args []string) error {
+	b, err := NewBridge(api, token, tailnet)
 	if err != nil {
 		return err
 	}

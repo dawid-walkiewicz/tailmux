@@ -231,16 +231,6 @@ func (m *Mux) configView() (ConfigView, error) {
 
 // --- HTTP ---
 
-// guard enforces the X-Tailmux header on every endpoint that changes
-// something, so a web page can't reach them with a cross-site request.
-func guard(w http.ResponseWriter, r *http.Request) bool {
-	if r.Header.Get("X-Tailmux") == "" {
-		http.Error(w, "missing X-Tailmux header", http.StatusForbidden)
-		return false
-	}
-	return true
-}
-
 func (m *Mux) serveConfig(w http.ResponseWriter, r *http.Request) {
 	v, err := m.configView()
 	if err != nil {
@@ -251,9 +241,6 @@ func (m *Mux) serveConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) serveAddTailnet(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	var tc TailnetConfig
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&tc); err != nil {
 		http.Error(w, "bad JSON: "+err.Error(), http.StatusBadRequest)
@@ -278,9 +265,6 @@ func (m *Mux) serveAddTailnet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) serveRemoveTailnet(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	if err := m.RemoveTailnet(r.PathValue("name")); err != nil {
 		code := http.StatusInternalServerError
 		if errors.Is(err, os.ErrNotExist) {
@@ -293,9 +277,6 @@ func (m *Mux) serveRemoveTailnet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) serveLogout(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 	defer cancel()
 	name := r.PathValue("name")
@@ -324,9 +305,6 @@ func (m *Mux) serveLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) serveSettings(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	var s Settings
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&s); err != nil {
 		http.Error(w, "bad JSON: "+err.Error(), http.StatusBadRequest)
@@ -340,9 +318,6 @@ func (m *Mux) serveSettings(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) serveRestart(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	if m.Restart == nil {
 		http.Error(w, "restart not supported", http.StatusNotImplemented)
 		return

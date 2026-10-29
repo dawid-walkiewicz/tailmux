@@ -13,9 +13,6 @@ import (
 // Streams (watch-ipn-bus) and upgrades (the dial behind `tailscale nc`)
 // pass through too.
 func (m *Mux) serveLocalAPI(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	t := m.Tailnet(r.PathValue("name"))
 	if t == nil {
 		http.Error(w, "no tailnet "+r.PathValue("name"), http.StatusNotFound)

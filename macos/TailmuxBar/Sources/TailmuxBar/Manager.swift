@@ -203,7 +203,7 @@ final class Manager: ObservableObject {
     }
 
     func openLogin(_ url: String) {
-        if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+        openWebURL(url)
     }
 
     func copy(_ s: String) {
@@ -250,4 +250,14 @@ final class MainWindowController {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
+}
+
+/// Opens a web page. Login URLs come from a tailnet's control server, so
+/// anything but http(s) with a host (a file, an app, another app's URL
+/// scheme) is refused rather than handed to NSWorkspace.
+func openWebURL(_ s: String) {
+    guard let url = URL(string: s), let scheme = url.scheme?.lowercased(),
+          scheme == "https" || scheme == "http", let host = url.host, !host.isEmpty
+    else { return }
+    NSWorkspace.shared.open(url)
 }

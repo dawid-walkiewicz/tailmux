@@ -18,6 +18,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 )
 
 func build(t *testing.T, out, version string) {
@@ -93,7 +95,10 @@ func TestSelfUpdate(t *testing.T) {
 	t.Cleanup(func() { cmd.Process.Kill(); cmd.Wait() })
 
 	version := func() string {
-		resp, err := http.Get("http://" + api + "/status")
+		// The daemon writes its API token next to the config.
+		req, _ := http.NewRequest("GET", "http://"+api+"/status", nil)
+		req.Header.Set(apiauth.Header, apiauth.Read(apiauth.Path(cfgPath)))
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return ""
 		}

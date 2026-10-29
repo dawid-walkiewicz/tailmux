@@ -39,7 +39,22 @@ To build it by hand, run `macos/build-app.sh`. It needs only the Command Line To
 
 ## API
 
-The app uses the daemon's local HTTP API (the `http` address, default `127.0.0.1:1056`):
+The app uses the daemon's local HTTP API (the `http` address, default `127.0.0.1:1056`).
+
+Every request needs the daemon's API token in an `X-Tailmux` header. The
+daemon keeps it in `api-token` next to its config file (mode 0600, owned by
+the config's owner; on Windows only SYSTEM, Administrators and the user who
+ran `tailmux service install` can read it). `tailmux service install` makes
+a new one for whoever ran it under `sudo`/`pkexec`. So the apps and the CLI
+of the user who set tailmux up work, and other users on the machine and web
+pages can't drive the daemon. Requests must also name the server by IP
+address or as `localhost`; any other `Host` is refused (421), which stops
+DNS rebinding. Only `GET /proxy.pac` (and the proxy itself) works without
+the token, since browsers can't send one.
+
+```sh
+curl -H "X-Tailmux: $(cat ~/.config/tailmux/api-token)" http://127.0.0.1:1056/status
+```
 
 | Endpoint | |
 | --- | --- |
@@ -50,8 +65,8 @@ The app uses the daemon's local HTTP API (the `http` address, default `127.0.0.1
 | `GET /peers` | Every device in every tailnet |
 | `GET /lock` | `[{"tailnet", "lock"}]`: Tailnet Lock per tailnet (`enabled`, `signed`, `node_key`, `public_key`, `sign_command`); `lock` is null when it's off. `/status` carries the same per tailnet |
 | `GET /exit-nodes` | `{"current", "nodes"}`: the exit node in use, and every device offering itself as one (own first, then by country, city and priority) |
-| `PUT /exit-node` | Body `{"tailnet": "home", "node": "<fqdn or id>"}` picks one, `{}` turns it off; applies live. Requires `X-Tailmux` |
+| `PUT /exit-node` | Body `{"tailnet": "home", "node": "<fqdn or id>"}` picks one, `{}` turns it off; applies live |
 | `POST /update` | Install the latest release now; progress shows in `/status` |
-| `POST /tailnets/{name}/enable`, `/disable` | Requires an `X-Tailmux` header, which blocks cross-site requests |
-| `/tailnets/{name}/localapi/...` | That tailnet's own LocalAPI, for [`tailmux cli`](cli.md). Requires `X-Tailmux` |
-| `POST /tailnets/{name}/logout` | Signs this device out of the tailnet and starts a new login; the reply carries `auth_url` when there is one. Requires `X-Tailmux` |
+| `POST /tailnets/{name}/enable`, `/disable` | Switches a tailnet on or off |
+| `/tailnets/{name}/localapi/...` | That tailnet's own LocalAPI, for [`tailmux cli`](cli.md) |
+| `POST /tailnets/{name}/logout` | Signs this device out of the tailnet and starts a new login; the reply carries `auth_url` when there is one |

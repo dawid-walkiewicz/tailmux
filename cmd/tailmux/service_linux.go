@@ -1,12 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 )
 
 const (
@@ -20,18 +24,44 @@ func systemConfigPath() string { return linuxConfig }
 
 func privileged() bool { return os.Geteuid() == 0 }
 
-// invokingUserConfig is the personal config of whoever ran sudo/pkexec.
-func invokingUserConfig() string {
+// invokingUser is whoever ran sudo/pkexec, or nil.
+func invokingUser() *user.User {
 	var u *user.User
 	if uid := os.Getenv("PKEXEC_UID"); uid != "" {
 		u, _ = user.LookupId(uid)
 	} else if name := os.Getenv("SUDO_USER"); name != "" {
 		u, _ = user.Lookup(name)
 	}
+	return u
+}
+
+// invokingUserConfig is the personal config of whoever ran sudo/pkexec.
+func invokingUserConfig() string {
+	u := invokingUser()
 	if u == nil {
 		return ""
 	}
 	return filepath.Join(u.HomeDir, ".config", "tailmux", "config.json")
+}
+
+// resetAPIToken gives the service a new API token that only root and
+// whoever ran sudo/pkexec can read: their apps and CLI keep working,
+// other users on the machine are kept out.
+func resetAPIToken() error {
+	path := apiauth.Path(linuxConfig)
+	if _, err := apiauth.Reset(path); err != nil {
+		return err
+	}
+	u := invokingUser()
+	if u == nil {
+		return nil
+	}
+	uid, err1 := strconv.Atoi(u.Uid)
+	gid, err2 := strconv.Atoi(u.Gid)
+	if err := errors.Join(err1, err2); err != nil {
+		return err
+	}
+	return os.Lchown(path, uid, gid)
 }
 
 func serviceInstall() error {
@@ -49,6 +79,9 @@ func serviceInstall() error {
 		}
 	}
 	if err := seedSystemConfig(linuxConfig, invokingUserConfig()); err != nil {
+		return err
+	}
+	if err := resetAPIToken(); err != nil {
 		return err
 	}
 	os.MkdirAll(linuxState, 0o700)

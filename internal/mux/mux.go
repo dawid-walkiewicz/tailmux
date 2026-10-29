@@ -38,7 +38,10 @@ type Mux struct {
 	ConfigPath string
 	// Restart, if set, restarts the daemon (to apply settings).
 	Restart func()
-	direct  net.Dialer
+	// APIToken must come with every API request (see apiauth). Empty
+	// refuses them all.
+	APIToken string
+	direct   net.Dialer
 
 	cacheMu sync.Mutex
 	cache   map[string]cacheEntry

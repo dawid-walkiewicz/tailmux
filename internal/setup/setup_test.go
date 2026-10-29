@@ -159,3 +159,21 @@ func TestLogin(t *testing.T) {
 		t.Fatalf("after login: screen=%v note=%q", m.screen, m.note)
 	}
 }
+
+func TestWebURL(t *testing.T) {
+	for s, want := range map[string]bool{
+		"https://login.tailscale.com/a/abc":    true,
+		"HTTPS://login.tailscale.com/a/abc":    true,
+		"http://headscale.lan:8080/register/x": true,
+		"file:///Users/Shared/x.command":       false,
+		"/Applications/Calculator.app":         false,
+		"vscode://file/etc/passwd":             false,
+		"https:///no-host":                     false,
+		"javascript:alert(1)":                  false,
+		"":                                     false,
+	} {
+		if webURL(s) != want {
+			t.Errorf("webURL(%q) != %v", s, want)
+		}
+	}
+}

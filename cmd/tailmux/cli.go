@@ -34,6 +34,7 @@ func runCLI(cfgPath string, args []string) error {
 		}
 		return err
 	}
+	apiKey = apiToken(cfgPath)
 	if fs.Arg(0) == "ssh" {
 		// tailscale ssh re-runs its own binary as the ProxyCommand and
 		// replaces itself with ssh, which would take the socket with it.
@@ -62,7 +63,7 @@ func runCLI(cfgPath string, args []string) error {
 	case !slices.Contains(names, *profile):
 		return fmt.Errorf("no tailnet %q; have %s", *profile, strings.Join(names, ", "))
 	}
-	err = tscli.Run(context.Background(), cfg.HTTP, *profile, fs.Args())
+	err = tscli.Run(context.Background(), cfg.HTTP, apiKey, *profile, fs.Args())
 	if errors.Is(err, flag.ErrHelp) {
 		return nil
 	}

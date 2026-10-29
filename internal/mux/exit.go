@@ -318,9 +318,6 @@ func (m *Mux) serveExitNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Mux) serveSetExitNode(w http.ResponseWriter, r *http.Request) {
-	if !guard(w, r) {
-		return
-	}
 	var e ExitNodeConfig
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&e); err != nil {
 		http.Error(w, "bad JSON: "+err.Error(), http.StatusBadRequest)

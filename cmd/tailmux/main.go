@@ -25,6 +25,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 	"github.com/GrowlyX/tailmux/internal/mux"
 	"github.com/GrowlyX/tailmux/internal/setup"
 	"github.com/GrowlyX/tailmux/internal/tun"
@@ -39,6 +40,15 @@ var (
 	defaultConfig = ""
 	selfUpdate    = ""
 )
+
+// apiKey is the daemon's API token, for the commands that talk to it.
+var apiKey string
+
+// apiToken finds the daemon's API token: next to the config in use, else
+// next to the system service's.
+func apiToken(cfgPath string) string {
+	return apiauth.Read(apiauth.Path(cfgPath), apiauth.Path(systemConfigPath()))
+}
 
 const usage = `tailmux: be on N tailnets at once.
 
@@ -93,6 +103,7 @@ func main() {
 		return
 	}
 	fs.Parse(args)
+	apiKey = apiToken(*cfgPath)
 
 	if *stateDir != "" {
 		os.Setenv("TAILMUX_STATE_DIR", *stateDir)
@@ -252,6 +263,11 @@ func up(ctx context.Context, cfg *mux.Config, cfgPath string, verbose bool) erro
 	m := mux.New(cfg, mux.Options{Verbose: verbose})
 	m.ConfigPath = cfgPath
 	defer m.Close()
+	tok, err := apiauth.Load(apiauth.Path(cfgPath), cfgPath)
+	if err != nil {
+		return fmt.Errorf("local API: %w", err)
+	}
+	m.APIToken = tok
 	if err := m.PinStates(); err != nil {
 		log.Printf("config: recording state directories: %v", err)
 	}
@@ -342,13 +358,20 @@ func (e errRestart) Error() string { return "restart into " + e.path }
 
 func apiGet(cfg *mux.Config, path string, v any) error {
 	c := &http.Client{Timeout: 15 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	resp, err := c.Get("http://" + cfg.HTTP + path)
+	req, _ := http.NewRequest("GET", "http://"+cfg.HTTP+path, nil)
+	req.Header.Set(apiauth.Header, apiKey)
+	resp, err := c.Do(req)
 	if err != nil {
 		return fmt.Errorf("is `tailmux up` running? %w", err)
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		return errNoToken
+	}
 	return json.NewDecoder(resp.Body).Decode(v)
 }
+
+var errNoToken = errors.New("the daemon refused this request: run it as the user who set tailmux up, or with sudo (the API token is in the api-token file next to the config)")
 
 func status(cfg *mux.Config) error {
 	var s mux.Status
@@ -406,7 +429,7 @@ func status(cfg *mux.Config) error {
 
 func repair(cfg *mux.Config) error {
 	req, _ := http.NewRequest("POST", "http://"+cfg.HTTP+"/repair", nil)
-	req.Header.Set("X-Tailmux", "1")
+	req.Header.Set(apiauth.Header, apiKey)
 	resp, err := (&http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(req)
 	if err != nil {
 		return fmt.Errorf("is `tailmux up` running? %w", err)

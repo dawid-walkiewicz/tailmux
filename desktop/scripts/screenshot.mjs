@@ -1,6 +1,6 @@
 // Captures the panel and every main window page, light and dark, as
 // PNGs. Serves the built frontend (dist/) from a tiny HTTP server whose
-// /api/ path proxies to the daemon and adds the X-Tailmux header, so the
+// /api/ path proxies to the daemon and adds its API token, so the
 // pages run unchanged in headless Chromium (src/lib/bridge.ts falls back
 // to that proxy when Tauri isn't there). This is the snapshot path CI
 // uses on ubuntu-latest and windows-latest: capturing a Tauri webview
@@ -8,11 +8,12 @@
 //
 //   pnpm build && pnpm screenshot [--out desktop/screenshots] [--only panel,settings] [--dark|--light]
 //
-// Reads TAILMUX_API (default http://127.0.0.1:1056). Exits non-zero when
+// Reads TAILMUX_API (default http://127.0.0.1:1056), and the API token
+// from the api-token file next to TAILMUX_CONFIG. Exits non-zero when
 // the daemon is unreachable so CI fails loudly instead of shipping
 // offline screenshots.
 import http from "node:http";
-import { createReadStream, existsSync, mkdirSync, statSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -25,13 +26,16 @@ const out = resolve(flag("--out") ?? join(here, "..", "screenshots"));
 const only = flag("--only")?.split(",");
 const schemes = args.includes("--dark") ? ["dark"] : args.includes("--light") ? ["light"] : ["light", "dark"];
 const daemon = (process.env.TAILMUX_API ?? "http://127.0.0.1:1056").replace(/\/$/, "");
+const token = process.env.TAILMUX_CONFIG
+  ? readFileSync(join(dirname(process.env.TAILMUX_CONFIG), "api-token"), "utf8").trim()
+  : "";
 
 if (!existsSync(join(dist, "index.html"))) {
   console.error("dist/ is missing; run `pnpm build` first");
   process.exit(1);
 }
 try {
-  const r = await fetch(`${daemon}/status`);
+  const r = await fetch(`${daemon}/status`, { headers: { "X-Tailmux": token } });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
 } catch (e) {
   console.error(`daemon at ${daemon} is unreachable: ${e.message ?? e}`);
@@ -48,7 +52,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const up = await fetch(daemon + url.pathname.slice(4) + url.search, {
         method: req.method,
-        headers: { "X-Tailmux": "1", ...(body.length ? { "Content-Type": "application/json" } : {}) },
+        headers: { "X-Tailmux": token, ...(body.length ? { "Content-Type": "application/json" } : {}) },
         body: body.length ? body : undefined,
       });
       res.writeHead(up.status, { "Content-Type": up.headers.get("content-type") ?? "text/plain" });

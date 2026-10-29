@@ -57,6 +57,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 	m := New(cfg, Options{MemStore: true})
 	t.Cleanup(func() { m.Close() })
+	m.APIToken = testToken
 	// The config as a user would have written it, for the management API.
 	m.ConfigPath = filepath.Join(t.TempDir(), "config.json")
 	os.WriteFile(m.ConfigPath, []byte(fmt.Sprintf(`{"tailnets":[{"name":"alpha","control_url":%q},{"name":"bravo","control_url":%q},{"name":"charlie","control_url":%q}]}`, alpha.URL, bravo.URL, charlie.URL)), 0o600)
@@ -246,8 +247,8 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("disable, enable and stats", func(t *testing.T) {
 		base := "http://" + httpLn.Addr().String()
-		if code := toggle(t, base, "bravo", "disable", false); code != http.StatusForbidden {
-			t.Fatalf("toggle without X-Tailmux header: %d, want 403", code)
+		if code := toggle(t, base, "bravo", "disable", false); code != http.StatusUnauthorized {
+			t.Fatalf("toggle without the API token: %d, want 401", code)
 		}
 		if code := toggle(t, base, "bravo", "disable", true); code != 200 {
 			t.Fatalf("disable: %d", code)
@@ -295,7 +296,7 @@ func TestEndToEnd(t *testing.T) {
 		call := func(method, path, body string, header bool) (int, string) {
 			req, _ := http.NewRequest(method, base+path, strings.NewReader(body))
 			if header {
-				req.Header.Set("X-Tailmux", "1")
+				req.Header.Set("X-Tailmux", testToken)
 			}
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -322,8 +323,8 @@ func TestEndToEnd(t *testing.T) {
 		delta := lab.NewTailnet(t, "delta")
 		delta.WebNode(t, dctx)
 		body := fmt.Sprintf(`{"name":"delta","control_url":%q,"ephemeral":true}`, delta.URL)
-		if code, _ := call("POST", "/tailnets", body, false); code != 403 {
-			t.Fatalf("add without header: %d", code)
+		if code, _ := call("POST", "/tailnets", body, false); code != http.StatusUnauthorized {
+			t.Fatalf("add without the API token: %d", code)
 		}
 		if code, out := call("POST", "/tailnets", body, true); code != 201 {
 			t.Fatalf("add: %d %s", code, out)
@@ -368,11 +369,11 @@ func TestEndToEnd(t *testing.T) {
 		if !c.TUN.Enabled || c.Updates.AutoEnabled() || c.Hostname != "laptop" {
 			t.Errorf("settings not saved: %+v", c)
 		}
-		if code, out := call("GET", "/config", "", false); code != 200 || !strings.Contains(out, `"laptop"`) {
+		if code, out := call("GET", "/config", "", true); code != 200 || !strings.Contains(out, `"laptop"`) {
 			t.Errorf("config view: %d %s", code, out)
 		}
 		log.Printf("hello from the log ring")
-		if code, out := call("GET", "/logs?n=50", "", false); code != 200 || !strings.Contains(out, "hello from the log ring") {
+		if code, out := call("GET", "/logs?n=50", "", true); code != 200 || !strings.Contains(out, "hello from the log ring") {
 			t.Errorf("logs: %d %.200s", code, out)
 		}
 	})
@@ -382,7 +383,7 @@ func TestEndToEnd(t *testing.T) {
 		for _, name := range []string{"alpha", "bravo"} {
 			var out strings.Builder
 			cli.Stdout = &out
-			err := tscli.Run(ctx, api, name, []string{"status", "--json", "--self", "--peers=false"})
+			err := tscli.Run(ctx, api, testToken, name, []string{"status", "--json", "--self", "--peers=false"})
 			cli.Stdout = os.Stdout
 			if err != nil {
 				t.Fatalf("%s: %v", name, err)
@@ -393,7 +394,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Upgrades pass through too: this is the dial behind `tailscale nc`.
-		b, err := tscli.NewBridge(api, "bravo")
+		b, err := tscli.NewBridge(api, testToken, "bravo")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -416,8 +417,8 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		resp.Body.Close()
-		if resp.StatusCode != http.StatusForbidden {
-			t.Errorf("without X-Tailmux: %s", resp.Status)
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("without the API token: %s", resp.Status)
 		}
 	})
 
@@ -449,7 +450,7 @@ func toggle(t *testing.T, base, name, action string, header bool) int {
 	t.Helper()
 	req, _ := http.NewRequest("POST", base+"/tailnets/"+name+"/"+action, nil)
 	if header {
-		req.Header.Set("X-Tailmux", "1")
+		req.Header.Set("X-Tailmux", testToken)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

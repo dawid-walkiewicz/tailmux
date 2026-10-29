@@ -104,6 +104,8 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      TOKEN_FILE: ${{ matrix.os == 'windows-latest' && 'C:/ProgramData/tailmux/api-token' || '/etc/tailmux/api-token' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -121,23 +123,30 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then out/tailmux.exe service install; else sudo out/tailmux service install; fi
       - name: running, answering, in TUN mode
         run: |
+          # install hands the API token to whoever ran it (sudo's user, or
+          # the elevated account on Windows).
+          tok=$(cat "$TOKEN_FILE")
           # The API answers before TUN is up; wait for the interface.
           for _ in $(seq 1 90); do
-            curl -sf http://127.0.0.1:1056/status > status.json && grep -q '"interface"' status.json && break
+            curl -sf -H "X-Tailmux: $tok" http://127.0.0.1:1056/status > status.json && grep -q '"interface"' status.json && break
             sleep 1
           done
+          # Without the token, or under a page's own domain name: refused.
+          [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:1056/status)" = 401 ] || { echo "API answered without the token"; exit 1; }
+          [ "$(curl -s -o /dev/null -w '%{http_code}' -H "X-Tailmux: $tok" -H 'Host: evil.example:1056' http://127.0.0.1:1056/status)" = 421 ] || { echo "API answered a rebound Host"; exit 1; }
           cat status.json
           for n in work home lab; do grep -q "\"name\": \"$n\"" status.json || { echo "tailnet $n missing"; exit 1; }; done
           grep -q '"interface"' status.json || { echo "TUN mode is not up"; exit 1; }
           if [ "$RUNNER_OS" = Windows ]; then out/tailmux.exe service status; else out/tailmux service status; fi
       - name: service log
         if: failure()
-        run: curl -sf "http://127.0.0.1:1056/logs?n=200" | tr ',' '\n' | tail -80 || true
+        run: |
+          curl -sf -H "X-Tailmux: $(cat "$TOKEN_FILE")" "http://127.0.0.1:1056/logs?n=200" | tr ',' '\n' | tail -80 || true
       - name: uninstall
         if: always()
         run: |
           if [ "$RUNNER_OS" = Windows ]; then out/tailmux.exe service uninstall; else sudo out/tailmux service uninstall; fi
-          if curl -sf --max-time 3 http://127.0.0.1:1056/status; then echo "still running after uninstall"; exit 1; fi
+          if curl -sf --max-time 3 -o /dev/null http://127.0.0.1:1056/proxy.pac; then echo "still running after uninstall"; exit 1; fi
 
   # The Windows/Linux desktop app: real installers, its API tests and
   # screenshots against a live daemon, and a screenshot of the real app.
@@ -263,12 +272,15 @@ jobs:
           TAILMUX_LAB="$PWD/lab.json" go test ./internal/mux -run TestLab -timeout 0 > lab.log 2>&1 &
           for _ in $(seq 1 120); do [ -f lab.json.ready ] && break; sleep 2; done
           ./tailmux up -config lab.json > up.log 2>&1 &
+          # The daemon writes its API token next to the config.
+          for _ in $(seq 1 30); do [ -s api-token ] && break; sleep 1; done
+          tok=$(cat api-token)
           # The API answers before the tailnets connect; wait for all three.
           for _ in $(seq 1 120); do
-            [ "$(curl -sf http://127.0.0.1:21056/status | grep -c '"state": "Running"')" = 3 ] && break
+            [ "$(curl -sf -H "X-Tailmux: $tok" http://127.0.0.1:21056/status | grep -c '"state": "Running"')" = 3 ] && break
             sleep 1
           done
-          curl -sf http://127.0.0.1:21056/status
+          curl -sf -H "X-Tailmux: $tok" http://127.0.0.1:21056/status
           for n in alpha bravo charlie; do curl -sf --retry 10 --retry-all-errors --socks5-hostname 127.0.0.1:21055 "http://web.$n/?bytes=3000000" > /dev/null; done
           # Keep traffic flowing so the charts in the screenshots have lines.
           (
@@ -283,6 +295,8 @@ jobs:
         working-directory: desktop/src-tauri
         env:
           TAILMUX_API: http://127.0.0.1:21056
+          # The apps find the API token next to this config.
+          TAILMUX_CONFIG: ${{ github.workspace }}/lab.json
         # Own target dir: a plain cargo build of the release binary would
         # replace the bundled one (built with the frontend embedded) with a
         # dev build that loads localhost:1420.
@@ -291,6 +305,8 @@ jobs:
         working-directory: desktop
         env:
           TAILMUX_API: http://127.0.0.1:21056
+          # The apps find the API token next to this config.
+          TAILMUX_CONFIG: ${{ github.workspace }}/lab.json
         run: |
           pnpm exec playwright install --with-deps chromium
           pnpm screenshot --out ../shots
@@ -298,6 +314,8 @@ jobs:
         if: runner.os == 'Linux'
         env:
           TAILMUX_API: http://127.0.0.1:21056
+          # The apps find the API token next to this config.
+          TAILMUX_CONFIG: ${{ github.workspace }}/lab.json
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" dbus-run-session -- \
             scripts/ci-app-screenshot-linux.sh desktop/src-tauri/target/release/bundle/appimage/*.AppImage shots/native-linux.png
@@ -306,6 +324,8 @@ jobs:
         shell: pwsh
         env:
           TAILMUX_API: http://127.0.0.1:21056
+          # The apps find the API token next to this config.
+          TAILMUX_CONFIG: ${{ github.workspace }}/lab.json
         run: |
           Start-Process desktop/src-tauri/target/release/tailmux-desktop.exe -ArgumentList '--page','overview'
           Start-Sleep 12
@@ -377,16 +397,16 @@ jobs:
           TAILMUX_LAB="$PWD/lab.json" go test ./internal/mux -run TestLab -timeout 0 > lab.log 2>&1 &
           for _ in $(seq 1 90); do [ -f lab.json.ready ] && break; sleep 2; done
           ./tailmux up -config lab.json > up.log 2>&1 &
-          for _ in $(seq 1 30); do curl -sf http://127.0.0.1:21056/status && break; sleep 1; done
+          for _ in $(seq 1 30); do [ -s api-token ] && curl -sf -H "X-Tailmux: $(cat api-token)" http://127.0.0.1:21056/status && break; sleep 1; done
           for n in alpha bravo charlie; do curl -sf --socks5-hostname 127.0.0.1:21055 "http://web.$n/?bytes=2000000" > /dev/null; done
       - name: render panel
         run: |
-          out=$(TAILMUX_API=http://127.0.0.1:21056 dist/TailmuxBar.app/Contents/MacOS/TailmuxBar --snapshot panel.png --wait 3)
+          out=$(TAILMUX_CONFIG="$PWD/lab.json" TAILMUX_API=http://127.0.0.1:21056 dist/TailmuxBar.app/Contents/MacOS/TailmuxBar --snapshot panel.png --wait 3)
           echo "$out"
           echo "$out" | grep -q "3 tailnets, offline: no"
-          TAILMUX_API=http://127.0.0.1:21056 dist/TailmuxBar.app/Contents/MacOS/TailmuxBar --snapshot panel-dark.png --dark
+          TAILMUX_CONFIG="$PWD/lab.json" TAILMUX_API=http://127.0.0.1:21056 dist/TailmuxBar.app/Contents/MacOS/TailmuxBar --snapshot panel-dark.png --dark
           for page in overview tailnets devices settings logs; do
-            TAILMUX_API=http://127.0.0.1:21056 dist/TailmuxBar.app/Contents/MacOS/TailmuxBar --snapshot "window-$page.png" --page "$page" --dark
+            TAILMUX_CONFIG="$PWD/lab.json" TAILMUX_API=http://127.0.0.1:21056 dist/TailmuxBar.app/Contents/MacOS/TailmuxBar --snapshot "window-$page.png" --page "$page" --dark
           done
       - uses: actions/upload-artifact@v7
         if: always()

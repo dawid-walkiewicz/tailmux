@@ -70,7 +70,11 @@ func TestTailnetLock(t *testing.T) {
 
 	// GET /lock reports the same.
 	rec := httptest.NewRecorder()
-	m.HTTPHandler("127.0.0.1:1").ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/lock", nil))
+	m.APIToken = testToken
+	req := httptest.NewRequest(http.MethodGet, "/lock", nil)
+	req.Host = "127.0.0.1:1056"
+	req.Header.Set("X-Tailmux", testToken)
+	m.HTTPHandler("127.0.0.1:1").ServeHTTP(rec, req)
 	if !strings.Contains(rec.Body.String(), lock.NodeKey) {
 		t.Errorf("/lock: %s", rec.Body)
 	}
