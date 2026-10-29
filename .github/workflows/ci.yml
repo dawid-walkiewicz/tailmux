@@ -186,6 +186,9 @@ jobs:
           xorg-x11-server-Xvfb ImageMagick dbus-daemon
           nss alsa-lib cups-libs mesa-libgbm libXcomposite libXdamage libXrandr
       - uses: actions/checkout@v7
+      # The checkout belongs to the runner's user, not the container's
+      # root, and git (so go build's VCS stamp) refuses it otherwise.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod

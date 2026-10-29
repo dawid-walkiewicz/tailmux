@@ -44,6 +44,9 @@ jobs:
       - name: build deps
         run: dnf install -y git gcc gcc-c++ make rust cargo webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel libxdo-devel file gh
       - uses: actions/checkout@v7
+      # The checkout belongs to the runner's user, not the container's
+      # root, and git (so go build's VCS stamp) refuses it otherwise.
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
