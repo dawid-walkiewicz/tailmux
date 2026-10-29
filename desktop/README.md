@@ -83,27 +83,19 @@ Windows).
 
 CI commands:
 
-Linux release bundles are built on Ubuntu 22.04, with a glibc 2.35
-baseline. Build on that version for distributable packages: building on a
-newer distribution also raises the requirement for bundled GTK/WebKit
-libraries. CI and releases check every ELF file in the AppImage with
-`python3 scripts/check-appimage-glibc.py <AppImage>` (from the repository
-root; requires `readelf` from binutils). CI also launches the packaged
-AppImage on Ubuntu 22.04 and checks that it stays running.
+The Linux release bundle is an `.rpm` built in a `fedora:latest`
+container, so it needs the current Fedora's libraries. CI launches the
+built app under Xvfb and checks that it stays running, then installs the
+`.rpm` in a Fedora container booted with systemd and checks that removing
+it takes the service with it.
 
 ```sh
-# ubuntu-22.04
-sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev build-essential
+# fedora:latest
+sudo dnf install -y gcc gcc-c++ make rust cargo file webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel libxdo-devel
 cd desktop && pnpm install --frozen-lockfile
 cp ../dist/tailmux-linux-amd64 src-tauri/binaries/tailmux-x86_64-unknown-linux-gnu
-pnpm tauri build --bundles deb,rpm,appimage
-# artifacts: src-tauri/target/release/bundle/deb/*.deb, .../rpm/*.rpm, .../appimage/*.AppImage
-
-# windows-latest (PowerShell)
-cd desktop; pnpm install --frozen-lockfile
-Copy-Item ..\dist\tailmux-windows-amd64.exe src-tauri\binaries\tailmux-x86_64-pc-windows-msvc.exe
-pnpm tauri build --bundles msi,nsis
-# artifacts: src-tauri\target\release\bundle\msi\*.msi, ...\nsis\*-setup.exe
+pnpm tauri build --bundles rpm
+# artifact: src-tauri/target/release/bundle/rpm/*.rpm
 ```
 
 ## Screenshots

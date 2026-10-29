@@ -47,23 +47,15 @@ jobs:
           ditto -c -k --keepParent dist/TailmuxBar.app "TailmuxBar_${GITHUB_REF_NAME#v}_macos.zip"
           gh release upload "$GITHUB_REF_NAME" "TailmuxBar_${GITHUB_REF_NAME#v}_macos.zip" --clobber
 
-  # The Windows and Linux desktop app (.deb, .rpm and AppImage on Linux),
-  # with the service bundled inside (and wintun.dll on Windows), attached
-  # to the release.
+  # The Linux desktop app as an .rpm, built on Fedora, with the service
+  # bundled inside, attached to the release.
   desktop:
     needs: binaries
-    strategy:
-      matrix:
-        # Keep the Linux packages compatible with glibc 2.35 (Ubuntu 22.04).
-        # ubuntu-latest can silently raise the AppImage's glibc requirement.
-        os: [ubuntu-22.04, windows-latest]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    env:
-      APPIMAGE_EXTRACT_AND_RUN: 1
+    runs-on: ubuntu-latest
+    container: fedora:latest
     steps:
+      - name: build deps
+        run: dnf install -y git gcc gcc-c++ make rust cargo webkit2gtk4.1-devel libappindicator-gtk3-devel librsvg2-devel openssl-devel libxdo-devel file gh
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
@@ -76,72 +68,19 @@ jobs:
           node-version: lts/*
           cache: pnpm
           cache-dependency-path: desktop/pnpm-lock.yaml
-      - name: Linux build deps
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev build-essential
       - name: service binary as the sidecar
         run: |
           triple=$(rustc -vV | sed -n 's/^host: //p')
-          ext=""
-          if [ "$RUNNER_OS" = Windows ]; then ext=.exe; scripts/fetch-wintun.sh desktop/src-tauri/binaries; fi
-          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME#v}" -o "desktop/src-tauri/binaries/tailmux-$triple$ext" ./cmd/tailmux
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME#v}" -o "desktop/src-tauri/binaries/tailmux-$triple" ./cmd/tailmux
       - name: bundle
         working-directory: desktop
         run: |
           pnpm install --frozen-lockfile
-          version="${GITHUB_REF_NAME#v}"
-          if [ "$RUNNER_OS" = Windows ]; then bundles=nsis,msi; else bundles=deb,rpm,appimage; fi
-          pnpm tauri build --bundles "$bundles" --config "{\"version\":\"$version\"}"
-      - name: check AppImage glibc compatibility
-        if: runner.os == 'Linux'
-        run: python3 scripts/check-appimage-glibc.py desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+          pnpm tauri build --bundles rpm --config "{\"version\":\"${GITHUB_REF_NAME#v}\"}"
       - name: attach to the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          shopt -s nullglob
-          files=(desktop/src-tauri/target/release/bundle/{deb/*.deb,rpm/*.rpm,appimage/*.AppImage,nsis/*.exe,msi/*.msi})
-          ls -la "${files[@]}"
-          gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
-
-  # Publishes the formula to GrowlyX/homebrew-tap. The tap is written with
-  # a deploy key (secret TAP_DEPLOY_KEY) scoped to that one repository.
-  homebrew:
-    needs: binaries
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: render formula
-        run: |
-          url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
-          sha=$(curl -fsSL "$url" | sha256sum | cut -d' ' -f1)
-          scripts/render-formula.sh "$url" "$sha" > tailmux.rb
-          cat tailmux.rb
-      - name: push to tap
-        env:
-          TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
-        run: |
-          install -m 600 /dev/null "$RUNNER_TEMP/tap_key"
-          printf '%s\n' "$TAP_DEPLOY_KEY" > "$RUNNER_TEMP/tap_key"
-          export GIT_SSH_COMMAND="ssh -i $RUNNER_TEMP/tap_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
-          git clone git@github.com:GrowlyX/homebrew-tap.git tap
-          mkdir -p tap/Formula
-          cp tailmux.rb tap/Formula/tailmux.rb
-          cd tap
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/tailmux.rb
-          git commit -m "tailmux ${GITHUB_REF_NAME#v}" || { echo "formula unchanged"; exit 0; }
-          git push origin HEAD
-
-  # What a user does: tap, install, test.
-  verify-install:
-    needs: homebrew
-    runs-on: macos-latest
-    steps:
-      - run: brew tap growlyx/tap
-      - run: brew install growlyx/tap/tailmux
-      - run: brew test growlyx/tap/tailmux
-      - run: test "$(tailmux version)" = "tailmux ${GITHUB_REF_NAME#v}"
+          ls -la desktop/src-tauri/target/release/bundle/rpm/*.rpm
+          gh release upload "$GITHUB_REF_NAME" desktop/src-tauri/target/release/bundle/rpm/*.rpm --clobber

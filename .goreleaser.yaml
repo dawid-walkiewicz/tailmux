@@ -4,16 +4,13 @@ project_name: tailmux
 builds:
   - main: ./cmd/tailmux
     env: [CGO_ENABLED=0]
-    goos: [linux, darwin, windows]
+    goos: [linux, darwin]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags: ["-s -w -X main.version={{ .Version }}"]
 
 archives:
   - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files: [README.md, LICENSE]
 
@@ -34,7 +31,7 @@ nfpms:
     package_name: tailmux-cli
     file_name_template: "{{ .PackageName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     vendor: tailmux
-    homepage: https://github.com/GrowlyX/tailmux
+    homepage: https://github.com/dawid-walkiewicz/tailmux
     maintainer: Subham K. <me@growly.gg>
     description: Be on all your tailnets at once (CLI and daemon).
     license: BSD-3-Clause

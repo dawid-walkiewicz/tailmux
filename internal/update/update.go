@@ -32,7 +32,7 @@ import (
 
 // ReleasesAPI is the latest-release endpoint; TAILMUX_RELEASES_API
 // overrides it (tests, mirrors).
-var ReleasesAPI = envOr("TAILMUX_RELEASES_API", "https://api.github.com/repos/GrowlyX/tailmux/releases/latest")
+var ReleasesAPI = envOr("TAILMUX_RELEASES_API", "https://api.github.com/repos/dawid-walkiewicz/tailmux/releases/latest")
 
 func envOr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
