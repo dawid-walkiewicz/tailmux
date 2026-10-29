@@ -426,6 +426,9 @@ jobs:
       HOMEBREW_NO_INSTALL_FROM_API: 1
     steps:
       - uses: actions/checkout@v7
+      # Runner images ship a stale homebrew-core; go.mod can need a newer
+      # Go than the image's.
+      - run: brew update
       - name: formula for this commit
         run: |
           git archive --format=tar.gz --prefix=tailmux-0.0.0-ci/ -o "$RUNNER_TEMP/tailmux-0.0.0-ci.tar.gz" HEAD
