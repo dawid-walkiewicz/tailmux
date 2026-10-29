@@ -12,12 +12,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 )
 
 // HTTPHandler serves three things on one port:
 //   - an HTTP proxy (CONNECT and absolute-URI requests),
 //   - GET /proxy.pac, which sends only tailnet destinations to the proxy,
-//   - a small JSON API: /status, /resolve?host=.
+//   - a small JSON API: /status, /resolve?host=. Every API request needs
+//     the token (m.APIToken) in the X-Tailmux header.
 func (m *Mux) HTTPHandler(socksAddr string) http.Handler {
 	api := http.NewServeMux()
 	api.HandleFunc("GET /status", m.serveStatus)
@@ -38,10 +41,13 @@ func (m *Mux) HTTPHandler(socksAddr string) http.Handler {
 	api.HandleFunc("GET /exit-nodes", m.serveExitNodes)
 	api.HandleFunc("GET /lock", m.serveLock)
 	api.HandleFunc("PUT /exit-node", m.serveSetExitNode)
-	api.HandleFunc("GET /proxy.pac", func(w http.ResponseWriter, r *http.Request) {
+	pac := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ns-proxy-autoconfig")
+		// It is JavaScript listing every tailnet's names and routes: keep
+		// pages from running it with <script src> and reading it back.
+		w.Header().Set("X-Content-Type-Options", "nosniff")
 		fmt.Fprint(w, m.PAC(r.Host, socksAddr))
-	})
+	}
 
 	fwd := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -66,10 +72,31 @@ func (m *Mux) HTTPHandler(socksAddr string) http.Handler {
 			m.serveConnect(w, r)
 		case r.URL.IsAbs():
 			fwd.ServeHTTP(w, r)
+		case !directHost(r.Host):
+			// A DNS-rebinding page reaches 127.0.0.1 under its own name.
+			http.Error(w, "use an IP address or localhost", http.StatusMisdirectedRequest)
+		case r.Method == http.MethodGet && r.URL.Path == "/proxy.pac":
+			// Browsers and the OS fetch it with no way to add a header.
+			pac(w, r)
+		case !apiauth.Valid(r.Header.Get(apiauth.Header), m.APIToken):
+			http.Error(w, "missing or wrong API token: send the contents of the api-token file next to the config in the "+apiauth.Header+" header", http.StatusUnauthorized)
 		default:
 			api.ServeHTTP(w, r)
 		}
 	})
+}
+
+// directHost reports whether a request's Host names the server by
+// address (or as localhost) rather than by some domain name.
+func directHost(host string) bool {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	if _, err := netip.ParseAddr(host); err == nil {
+		return true
+	}
+	return strings.EqualFold(host, "localhost")
 }
 
 func (m *Mux) serveConnect(w http.ResponseWriter, r *http.Request) {
@@ -283,13 +310,9 @@ func uniq(s []string) []string {
 	return slices.DeleteFunc(s, func(v string) bool { return v == "" })
 }
 
-// serveUpdate starts an update in the background (same X-Tailmux rule as
-// the tailnet switches); progress shows up in /status.
+// serveUpdate starts an update in the background; progress shows up in
+// /status.
 func (m *Mux) serveUpdate(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Tailmux") == "" {
-		http.Error(w, "missing X-Tailmux header", http.StatusForbidden)
-		return
-	}
 	if m.TriggerUpdate == nil {
 		http.Error(w, "updates are disabled", http.StatusNotImplemented)
 		return
@@ -304,10 +327,6 @@ func (m *Mux) serveUpdate(w http.ResponseWriter, r *http.Request) {
 
 // serveRepair re-applies routes and DNS and flushes the OS resolver cache.
 func (m *Mux) serveRepair(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Tailmux") == "" {
-		http.Error(w, "missing X-Tailmux header", http.StatusForbidden)
-		return
-	}
 	if m.Repair == nil {
 		http.Error(w, "nothing to repair: TUN mode is off", http.StatusNotImplemented)
 		return

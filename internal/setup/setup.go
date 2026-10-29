@@ -22,6 +22,7 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 	"github.com/GrowlyX/tailmux/internal/mux"
 )
 
@@ -97,10 +98,12 @@ func tick() tea.Cmd {
 }
 
 func (m *model) pollDaemon() tea.Cmd {
-	addr := m.effective().HTTP
+	addr, token := m.effective().HTTP, apiauth.Read(apiauth.Path(m.path))
 	return func() tea.Msg {
 		c := &http.Client{Timeout: 800 * time.Millisecond, Transport: &http.Transport{Proxy: nil}}
-		resp, err := c.Get("http://" + addr + "/status")
+		req, _ := http.NewRequest("GET", "http://"+addr+"/status", nil)
+		req.Header.Set(apiauth.Header, token)
+		resp, err := c.Do(req)
 		if err != nil {
 			return daemonMsg(nil)
 		}
@@ -587,7 +590,7 @@ type loggedOutMsg struct {
 // logout signs the device out of one tailnet and starts a new login, in
 // the daemon if one runs, else in setup's own tailnets.
 func (m *model) logout(name string) tea.Cmd {
-	addr, l := m.effective().HTTP, m.login
+	addr, l, token := m.effective().HTTP, m.login, apiauth.Read(apiauth.Path(m.path))
 	x, viaDaemon := l.mux, l.viaDaemon
 	reply := func(err error) tea.Msg { return loggedOutMsg{l, name, err} }
 	return func() tea.Msg {
@@ -600,7 +603,7 @@ func (m *model) logout(name string) tea.Cmd {
 			return reply(x.Logout(ctx, name))
 		}
 		req, _ := http.NewRequestWithContext(ctx, "POST", "http://"+addr+"/tailnets/"+url.PathEscape(name)+"/logout", nil)
-		req.Header.Set("X-Tailmux", "1")
+		req.Header.Set(apiauth.Header, token)
 		resp, err := (&http.Client{Transport: &http.Transport{Proxy: nil}}).Do(req)
 		if err != nil {
 			return reply(err)
@@ -773,10 +776,21 @@ func startHint(tun bool) string {
 	return "brew services start tailmux  (or: tailmux up)"
 }
 
-func openBrowser(url string) {
+// openBrowser opens a login URL. It comes from the control server, which
+// could otherwise name a local program or file for open/xdg-open to run.
+func openBrowser(u string) {
+	if !webURL(u) {
+		return
+	}
 	cmd := "xdg-open"
 	if runtime.GOOS == "darwin" {
 		cmd = "open"
 	}
-	exec.Command(cmd, url).Start()
+	exec.Command(cmd, u).Start()
+}
+
+// webURL reports whether s is an http or https URL with a host.
+func webURL(s string) bool {
+	u, err := url.Parse(s)
+	return err == nil && (u.Scheme == "https" || u.Scheme == "http") && u.Host != ""
 }

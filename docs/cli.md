@@ -44,9 +44,11 @@ Not useful here:
 
 Each tailnet's LocalAPI, the API the tailscale CLI talks to, is served
 through tailmux's HTTP API at `/tailnets/<name>/localapi/`, and only to
-requests that carry an `X-Tailmux` header, so web pages can't reach it.
+requests that carry the API token ([see the API](menubar.md#api)).
 `tailmux cli` opens a socket that only you can use (a named pipe on
-Windows), forwards it there, and runs the CLI with `--socket` pointing at it.
+Windows), forwards it there with the token, and runs the CLI with
+`--socket` pointing at it.
 
-Like the rest of the local API, it's open to every user on the machine.
-On a shared machine, anyone can run tailscale commands as your nodes.
+Only whoever can read the token can do this: the user who set tailmux up
+(and root). Other users on the machine can't run tailscale commands as
+your nodes.

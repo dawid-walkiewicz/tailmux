@@ -1,7 +1,8 @@
 //! The daemon's loopback HTTP API. All requests go through here, from
-//! Rust: the daemon sends no CORS headers on purpose, and every changing
-//! request must carry `X-Tailmux: 1`, which a browser fetch could not
-//! add across origins.
+//! Rust: the daemon sends no CORS headers on purpose, and every request
+//! must carry its API token in `X-Tailmux`. The token sits in an
+//! `api-token` file next to the config that only this user can read, so
+//! neither web pages nor other users on the machine can send it.
 
 use serde_json::Value;
 use std::path::PathBuf;
@@ -30,6 +31,22 @@ pub fn discover_base() -> String {
         return format!("http://{addr}");
     }
     "http://127.0.0.1:1056".to_string()
+}
+
+/// The daemon's API token: the `api-token` file next to the first config
+/// location that has one. Read for every request, so a token the daemon
+/// replaced (a service reinstall) is picked up without a restart.
+pub fn discover_token() -> String {
+    for path in config_paths() {
+        let Some(dir) = path.parent() else { continue };
+        if let Ok(text) = std::fs::read_to_string(dir.join("api-token")) {
+            let token = text.trim();
+            if !token.is_empty() {
+                return token.to_string();
+            }
+        }
+    }
+    String::new()
 }
 
 fn config_paths() -> Vec<PathBuf> {
@@ -82,18 +99,17 @@ pub fn call(base: &str, method: &str, path: &str, body: Option<Value>) -> Result
     // requests can take a while (joining a tailnet waits for its login
     // URL, an update downloads a release).
     let agent = agent(Duration::from_secs(if method == "GET" { 3 } else { 90 }));
+    let token = discover_token();
     let response = if method == "GET" {
-        agent.get(&url).call()
+        agent.get(&url).header("X-Tailmux", token.as_str()).call()
     } else {
-        // Anything that changes state must carry X-Tailmux; adding it to
-        // every non-GET is simpler than listing the endpoints.
         let req = match method.as_str() {
             "POST" => agent.post(&url),
             "PUT" => agent.put(&url),
             "DELETE" => agent.delete(&url).force_send_body(),
             other => return Err(format!("unsupported method {other}")),
         }
-        .header("X-Tailmux", "1");
+        .header("X-Tailmux", token.as_str());
         match body {
             Some(json) => req.header("Content-Type", "application/json").send_json(json),
             None => req.send_empty(),

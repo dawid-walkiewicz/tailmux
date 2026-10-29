@@ -17,8 +17,9 @@ Svelte 5 frontend. It mirrors the macOS menu bar app in
   files) and Logs.
 
 All HTTP to the daemon happens in Rust (`src-tauri/src/api.rs`): the daemon
-sends no CORS headers on purpose, and every changing request carries
-`X-Tailmux: 1`. The frontend calls one `api` command. The daemon's address
+sends no CORS headers on purpose, and every request carries the API token
+in `X-Tailmux`, read from the `api-token` file next to the config. The
+frontend calls one `api` command. The daemon's address
 comes from `TAILMUX_API`, else the `http` key of the first config file found
 (`TAILMUX_CONFIG`; Linux `~/.config/tailmux/config.json`,
 `/etc/tailmux/config.json`, `/home/linuxbrew/.linuxbrew/etc/tailmux/config.json`;
@@ -109,7 +110,8 @@ pnpm tauri build --bundles msi,nsis
 
 `scripts/screenshot.mjs` captures the panel and all six pages, light and
 dark, into `screenshots/`. It serves the built `dist/` from a tiny HTTP
-server whose `/api/` path proxies to the daemon (adding `X-Tailmux`), so the
+server whose `/api/` path proxies to the daemon (adding the token from the
+`api-token` next to `TAILMUX_CONFIG`), so the
 pages run unchanged in headless Chromium: `src/lib/bridge.ts` falls back to
 that proxy when Tauri isn't present. Capturing a Tauri webview to a file has
 no cross-platform API, and Chromium draws the same DOM, so this is what CI
@@ -119,7 +121,7 @@ daemon is unreachable.
 ```sh
 pnpm exec playwright install chromium      # once
 pnpm build
-TAILMUX_API=http://127.0.0.1:21056 pnpm screenshot           # all, light and dark
+TAILMUX_CONFIG=$PWD/../lab.json TAILMUX_API=http://127.0.0.1:21056 pnpm screenshot   # all, light and dark
 pnpm screenshot --only panel,settings --dark --out /tmp/shots
 ```
 

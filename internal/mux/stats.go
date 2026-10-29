@@ -177,15 +177,8 @@ func (m *Mux) serveStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, m.Stats())
 }
 
-// serveToggle handles POST /tailnets/{name}/enable and .../disable. The
-// X-Tailmux header is required so a web page can't flip tailnets with a
-// cross-site form post (custom headers force a CORS preflight, which
-// this server never approves).
+// serveToggle handles POST /tailnets/{name}/enable and .../disable.
 func (m *Mux) serveToggle(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Tailmux") == "" {
-		http.Error(w, "missing X-Tailmux header", http.StatusForbidden)
-		return
-	}
 	on := r.PathValue("action") == "enable"
 	if !on && r.PathValue("action") != "disable" {
 		http.NotFound(w, r)

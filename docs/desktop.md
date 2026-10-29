@@ -8,7 +8,8 @@ the same dot-grid icon, panel, and main window with Overview, Tailnets,
 Devices, Exit node, Settings and Logs.
 
 - Talks to the daemon's local HTTP API (see [menubar.md](menubar.md#api))
-  from Rust, with the `X-Tailmux` header on every changing request.
+  from Rust, with the API token (from `api-token` next to the config) on
+  every request.
 - **Install service…** (Settings, or the offline view) runs the bundled
   `tailmux service install` with elevation: `pkexec` on Linux, a UAC prompt
   on Windows. TUN mode needs the service.

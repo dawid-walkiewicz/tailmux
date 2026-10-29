@@ -68,9 +68,22 @@ async fn api(
         .map_err(|e| e.to_string())?
 }
 
+/// Opens a web page. Login URLs come from a tailnet's control server, so
+/// anything but http(s) (a file, an app, some other app's URL scheme) is
+/// refused rather than handed to the OS.
 #[tauri::command]
 fn open_url(app: AppHandle, url: String) -> Result<(), String> {
+    if !is_web_url(&url) {
+        return Err(format!("not opening {url}: only http and https links are allowed"));
+    }
     app.opener().open_url(url, None::<&str>).map_err(|e| e.to_string())
+}
+
+fn is_web_url(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    ["https://", "http://"]
+        .iter()
+        .any(|p| lower.starts_with(p) && lower.len() > p.len() && !lower[p.len()..].starts_with('/'))
 }
 
 #[tauri::command]

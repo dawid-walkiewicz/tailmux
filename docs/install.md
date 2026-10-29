@@ -71,6 +71,11 @@ tailmux service status
 ```
 
 `service install` uses the tailnets from your own `tailmux setup`, if you ran it first.
+It also gives you, and only you, the [API token](menubar.md#api)
+(`/etc/tailmux/api-token`) that the app and the CLI need to manage the
+service. To hand that to another account, run `service install` again
+with `sudo` from it. A service installed by an older tailmux has a token
+only root can read: run `sudo tailmux service install` once more.
 
 What tailmux needs at runtime: `ip` (iproute2) and root for TUN mode, and
 systemd for `service install` (or see [without systemd](#without-systemd)).

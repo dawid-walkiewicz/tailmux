@@ -128,11 +128,12 @@ func TestLoginsFollowTailnets(t *testing.T) {
 		}
 	})
 
+	m.APIToken = testToken
 	srv := httptest.NewServer(m.HTTPHandler("127.0.0.1:0"))
 	t.Cleanup(srv.Close)
 	call := func(method, path string) (int, string) {
 		req, _ := http.NewRequestWithContext(ctx, method, srv.URL+path, nil)
-		req.Header.Set("X-Tailmux", "1")
+		req.Header.Set("X-Tailmux", testToken)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			t.Fatal(err)

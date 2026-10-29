@@ -165,12 +165,7 @@ struct API {
         if let env = ProcessInfo.processInfo.environment["TAILMUX_API"], let url = URL(string: env) {
             return API(base: url)
         }
-        var paths: [String] = []
-        if let p = ProcessInfo.processInfo.environment["TAILMUX_CONFIG"] { paths.append(p) }
-        paths.append(NSHomeDirectory() + "/.config/tailmux/config.json")
-        paths.append("/opt/homebrew/etc/tailmux/config.json")
-        paths.append("/usr/local/etc/tailmux/config.json")
-        for p in paths {
+        for p in configPaths() {
             guard let data = FileManager.default.contents(atPath: p),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
             else { continue }
@@ -181,6 +176,38 @@ struct API {
             if let url = URL(string: "http://" + addr) { return API(base: url) }
         }
         return API(base: URL(string: "http://127.0.0.1:1056")!)
+    }
+
+    private static func configPaths() -> [String] {
+        var paths: [String] = []
+        if let p = ProcessInfo.processInfo.environment["TAILMUX_CONFIG"] { paths.append(p) }
+        paths.append(NSHomeDirectory() + "/.config/tailmux/config.json")
+        paths.append("/opt/homebrew/etc/tailmux/config.json")
+        paths.append("/usr/local/etc/tailmux/config.json")
+        return paths
+    }
+
+    /// The daemon's API token: the api-token file next to the first config
+    /// location that has one, readable only by the user who set tailmux
+    /// up. Read for every request, so a new token is picked up.
+    static func token() -> String {
+        for p in configPaths() {
+            let path = (p as NSString).deletingLastPathComponent + "/api-token"
+            if let data = FileManager.default.contents(atPath: path),
+               let s = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !s.isEmpty {
+                return s
+            }
+        }
+        return ""
+    }
+
+    /// A request carrying the API token, which every endpoint requires.
+    private func request(_ url: URL, _ method: String = "GET") -> URLRequest {
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        req.setValue(API.token(), forHTTPHeaderField: "X-Tailmux")
+        return req
     }
 
     private static let decoder: JSONDecoder = {
@@ -197,7 +224,7 @@ struct API {
     }()
 
     func get<T: Decodable>(_ path: String, as: T.Type) async throws -> T {
-        let (data, resp) = try await API.session.data(from: base.appendingPathComponent(path))
+        let (data, resp) = try await API.session.data(for: request(base.appendingPathComponent(path)))
         try check(resp, data)
         return try API.decoder.decode(T.self, from: data)
     }
@@ -205,17 +232,15 @@ struct API {
     func getLogs(_ n: Int) async throws -> [String] {
         var c = URLComponents(url: base.appendingPathComponent("logs"), resolvingAgainstBaseURL: false)!
         c.queryItems = [URLQueryItem(name: "n", value: String(n))]
-        let (data, resp) = try await API.session.data(from: c.url!)
+        let (data, resp) = try await API.session.data(for: request(c.url!))
         try check(resp, data)
         return try API.decoder.decode([String].self, from: data)
     }
 
-    /// Sends a changing request (always with X-Tailmux) and returns the body.
+    /// Sends a changing request and returns the body.
     @discardableResult
     func send(_ method: String, _ path: String, json: [String: Any]? = nil) async throws -> Data {
-        var req = URLRequest(url: base.appendingPathComponent(path))
-        req.httpMethod = method
-        req.setValue("1", forHTTPHeaderField: "X-Tailmux")
+        var req = request(base.appendingPathComponent(path), method)
         if let json {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: json)
@@ -230,9 +255,7 @@ struct API {
     }
 
     func setEnabled(_ name: String, _ on: Bool) async throws {
-        var req = URLRequest(url: base.appendingPathComponent("tailnets/\(name)/\(on ? "enable" : "disable")"))
-        req.httpMethod = "POST"
-        req.setValue("1", forHTTPHeaderField: "X-Tailmux")
+        let req = request(base.appendingPathComponent("tailnets/\(name)/\(on ? "enable" : "disable")"), "POST")
         let (data, resp) = try await API.session.data(for: req)
         try check(resp, data)
     }
@@ -249,9 +272,7 @@ struct API {
     }
 
     func startUpdate() async throws {
-        var req = URLRequest(url: base.appendingPathComponent("update"))
-        req.httpMethod = "POST"
-        req.setValue("1", forHTTPHeaderField: "X-Tailmux")
+        let req = request(base.appendingPathComponent("update"), "POST")
         let (data, resp) = try await API.session.data(for: req)
         try check(resp, data)
     }

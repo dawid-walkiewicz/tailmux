@@ -1,4 +1,5 @@
 //! Runs against a live daemon when TAILMUX_API is set; skipped otherwise.
+//! Set TAILMUX_CONFIG to its config too: the API token sits next to it.
 //! Adds and removes a throwaway tailnet and round-trips the settings.
 use serde_json::json;
 use tailmux_desktop_lib::api;

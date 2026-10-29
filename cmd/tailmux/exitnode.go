@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 	"github.com/GrowlyX/tailmux/internal/mux"
 )
 
@@ -156,7 +157,7 @@ func pickExitNode(nodes []mux.ExitNodeInfo, q string) (mux.ExitNodeInfo, error) 
 func setExitNode(cfg *mux.Config, tailnet, node string) error {
 	body, _ := json.Marshal(mux.ExitNodeConfig{Tailnet: tailnet, Node: node})
 	req, _ := http.NewRequest("PUT", "http://"+cfg.HTTP+"/exit-node", bytes.NewReader(body))
-	req.Header.Set("X-Tailmux", "1")
+	req.Header.Set(apiauth.Header, apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := (&http.Client{Timeout: 20 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(req)
 	if err != nil {

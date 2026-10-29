@@ -198,8 +198,8 @@ struct TailnetRow: View {
         .contentShape(Rectangle())
         .onHover { hover.on = $0 }
         .onTapGesture {
-            if let u = tailnet.authUrl, !u.isEmpty, let url = URL(string: u) {
-                NSWorkspace.shared.open(url)
+            if let u = tailnet.authUrl, !u.isEmpty {
+                openWebURL(u)
             } else if tailnet.needsSignature, let cmd = tailnet.lock?.signCommand {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(cmd, forType: .string)

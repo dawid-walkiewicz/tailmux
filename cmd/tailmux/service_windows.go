@@ -11,6 +11,8 @@ import (
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
+
+	"github.com/GrowlyX/tailmux/internal/apiauth"
 )
 
 const serviceName = "tailmux"
@@ -117,6 +119,11 @@ func serviceInstall() error {
 		return err
 	}
 	os.MkdirAll(systemStateDir(), 0o700)
+	// A new API token for the service, readable by SYSTEM, Administrators
+	// and the user installing it (whose desktop app then keeps working).
+	if _, err := apiauth.Reset(apiauth.Path(systemConfigPath())); err != nil {
+		return err
+	}
 
 	m, err := mgr.Connect()
 	if err != nil {
