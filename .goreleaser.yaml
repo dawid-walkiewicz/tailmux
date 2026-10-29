@@ -4,7 +4,7 @@ project_name: tailmux
 builds:
   - main: ./cmd/tailmux
     env: [CGO_ENABLED=0]
-    goos: [linux, darwin]
+    goos: [linux]
     goarch: [amd64, arm64]
     flags: [-trimpath]
     ldflags: ["-s -w -X main.version={{ .Version }}"]

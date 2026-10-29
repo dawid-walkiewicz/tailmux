@@ -2,6 +2,9 @@
 
 ## Homebrew (macOS, Linux)
 
+This fork has no tap and doesn't build for macOS: the formula below is
+upstream's.
+
 ```sh
 brew install growlyx/tap/tailmux
 tailmux setup

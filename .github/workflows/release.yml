@@ -34,19 +34,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  menubar-app:
-    needs: binaries
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: build and attach TailmuxBar.app
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          macos/build-app.sh "$PWD/dist" "$GITHUB_REF_NAME"
-          ditto -c -k --keepParent dist/TailmuxBar.app "TailmuxBar_${GITHUB_REF_NAME#v}_macos.zip"
-          gh release upload "$GITHUB_REF_NAME" "TailmuxBar_${GITHUB_REF_NAME#v}_macos.zip" --clobber
-
   # The Linux desktop app as an .rpm, built on Fedora, with the service
   # bundled inside, attached to the release.
   desktop:
