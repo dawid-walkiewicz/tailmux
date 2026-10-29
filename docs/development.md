@@ -26,15 +26,16 @@ TAILMUX_API=http://127.0.0.1:21056 macos/build/TailmuxBar.app/Contents/MacOS/Tai
 
 ## What CI checks
 
-- **lint**: golangci-lint on darwin and linux, `go mod tidy`, builds for every GOOS, govulncheck.
-- **test**: race-enabled unit and end-to-end tests on Linux and macOS.
-- **tun-e2e**: `TestSystem` as root on both OSes. It creates a real TUN device,
+- **lint**: golangci-lint, `go mod tidy`, builds for linux and freebsd, govulncheck.
+- **test**: race-enabled unit and end-to-end tests on Linux.
+- **tun-e2e**: `TestSystem` as root on Linux. It creates a real TUN device,
   sets up routes and the system resolver, then runs plain
   `http.Get("http://web.bravo/")`.
-- **menubar**: builds the app and renders its panel against a live daemon.
-  The PNGs are uploaded as artifacts.
-- **homebrew**: installs the formula from a tarball of the commit, then runs
-  `brew test` and `brew audit --strict`.
+- **service**: `tailmux service install` under systemd: the API, its token
+  checks and TUN mode, then a clean uninstall.
+- **desktop / desktop-uninstall**: builds the desktop `.rpm` on Fedora, runs
+  its API tests and screenshots against a live daemon, and checks that
+  removing the `.rpm` removes the service.
 - **linux-packages / linux-distros**: builds the `tailmux-cli` packages with
   GoReleaser and installs each on its distro (Debian, Fedora, Alpine, Arch).
   On Fedora and Arch it also runs `make && make install`.
@@ -44,12 +45,8 @@ TAILMUX_API=http://127.0.0.1:21056 macos/build/TailmuxBar.app/Contents/MacOS/Tai
 Push a `v*` tag. The release workflow then:
 
 1. runs the tests;
-2. publishes binaries and the `tailmux-cli` Linux packages with GoReleaser;
-3. attaches the menu bar app as a zip, and the desktop app (`.deb`, `.rpm`,
-   AppImage, Windows installers);
-4. pushes the formula to [GrowlyX/homebrew-tap](https://github.com/GrowlyX/homebrew-tap)
-   using the `TAP_DEPLOY_KEY` deploy key;
-5. installs from the tap on a clean macOS runner.
+2. publishes the Linux binaries and the `tailmux-cli` packages with GoReleaser;
+3. attaches the desktop app as an `.rpm` built on Fedora.
 
 ## The README banner
 

@@ -2,6 +2,9 @@
 
 ## Homebrew (macOS, Linux)
 
+This fork has no tap and doesn't build for macOS: the formula below is
+upstream's.
+
 ```sh
 brew install growlyx/tap/tailmux
 tailmux setup
@@ -28,12 +31,8 @@ Logs go to `$(brew --prefix)/var/log/tailmux.log`.
 
 ## Windows
 
-Download `tailmux_<version>_x64-setup.exe` (or the `.msi`) from
-[Releases](https://github.com/GrowlyX/tailmux/releases/latest) and run it.
-That installs the [desktop app](desktop.md) with the tailmux service inside.
-Open it and press **Install service…**; Windows asks for Administrator once.
-The service runs TUN mode, so every app can reach your tailnets. Its config
-lives at `%ProgramData%\tailmux\config.json`.
+This fork doesn't build for Windows. Use
+[upstream's releases](https://github.com/GrowlyX/tailmux/releases/latest).
 
 ## Linux
 
@@ -42,19 +41,16 @@ icon and window on top of the CLI.
 
 | | You get | For |
 | --- | --- | --- |
-| Desktop app `.deb` / `.rpm` | tray app + CLI | Debian, Ubuntu, Mint / Fedora, RHEL, openSUSE |
-| Desktop app `.AppImage` | tray app + CLI, nothing installed | glibc 2.35+ (Ubuntu 22.04+) |
+| Desktop app `.rpm` | tray app + CLI | Fedora (built on the current release) |
 | `tailmux-cli` packages | CLI + daemon, no tray app | servers; `.deb`, `.rpm`, `.apk` (Alpine), `.pkg.tar.zst` (Arch) |
 | [Build from source](#build-from-source) | either | any distro, your own build |
 | Homebrew on Linux | CLI, built from source | `brew install growlyx/tap/tailmux` |
 
-Everything is on [Releases](https://github.com/GrowlyX/tailmux/releases/latest),
+Everything is on [Releases](https://github.com/dawid-walkiewicz/tailmux/releases/latest),
 for x86-64 (the CLI packages also for arm64):
 
 ```sh
-sudo apt install ./tailmux_<version>_amd64.deb                     # Debian, Ubuntu
-sudo dnf install ./tailmux-<version>-1.x86_64.rpm                  # Fedora, RHEL (zypper on openSUSE)
-chmod +x tailmux_<version>_amd64.AppImage && ./tailmux_<version>_amd64.AppImage
+sudo dnf install ./tailmux-<version>-1.x86_64.rpm                  # Fedora
 
 sudo apt install ./tailmux-cli_<version>_linux_amd64.deb           # CLI only
 sudo dnf install ./tailmux-cli_<version>_linux_amd64.rpm
@@ -192,6 +188,6 @@ sudo tailmux service uninstall   # Windows: tailmux service uninstall, as Admini
 go install github.com/GrowlyX/tailmux/cmd/tailmux@latest
 ```
 
-Or download a binary from [Releases](https://github.com/GrowlyX/tailmux/releases).
+Or download a binary from [Releases](https://github.com/dawid-walkiewicz/tailmux/releases).
 The config then lives at `~/.config/tailmux/config.json` and state at `~/.local/share/tailmux`.
 Override them with `-config`, `TAILMUX_CONFIG` or `TAILMUX_STATE_DIR`.
