@@ -240,7 +240,20 @@ fn parse_args() -> (Option<String>, Option<String>) {
     (flag("--page"), flag("--snapshot-page"))
 }
 
+// WebKitGTK's DMA-BUF renderer gets the app killed on NVIDIA's proprietary
+// driver under Wayland: the compositor drops it with protocol error 71 as
+// the window opens. Must run before GTK starts.
+#[cfg(target_os = "linux")]
+fn avoid_nvidia_dmabuf() {
+    const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    if std::env::var_os(VAR).is_none() && std::path::Path::new("/sys/module/nvidia").exists() {
+        std::env::set_var(VAR, "1");
+    }
+}
+
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    avoid_nvidia_dmabuf();
     let (page, snapshot) = parse_args();
     if snapshot.is_some() {
         // Capturing the webview to a file has no cross-platform API in
